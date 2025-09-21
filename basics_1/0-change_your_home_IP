@@ -1,69 +1,7 @@
 #!/usr/bin/env bash
-# Set hosts: localhost=127.0.0.2, facebook.com=8.8.8.8
+# Configure Ubuntu server so that:
+#   - localhost resolves to 127.0.0.2
+#   - facebook.com resolves to 8.8.8.8
 
-set -euo pipefail
-
-HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
-STAMP="$(date +%Y%m%d-%H%M%S)"
-HOSTS_DIR="$(dirname "$HOSTS_FILE")"
-HOSTS_BASE="$(basename "$HOSTS_FILE")"
-BACKUP_FILE="${HOSTS_DIR}/${HOSTS_BASE}.bak-${STAMP}"
-
-require_root() {
-  if [[ -w "$HOSTS_FILE" || -w "$HOSTS_DIR" ]]; then
-    return
-  fi
-  if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-    echo "This script must be run as root when modifying $HOSTS_FILE. Try: sudo $0" >&2
-    exit 1
-  fi
-}
-
-backup_hosts() {
-  cp -p "$HOSTS_FILE" "$BACKUP_FILE"
-  echo "Backup: $BACKUP_FILE"
-}
-
-apply_mappings() {
-  tmpfile="$(mktemp)"
-
-  cat >"$tmpfile" <<'EOF'
-127.0.0.2	localhost
-8.8.8.8	facebook.com
-EOF
-
-  awk '{
-    drop=0;
-    for (i=2;i<=NF;i++) {
-      if ($i=="localhost" || $i=="facebook.com") { drop=1; break }
-    }
-    if (!drop) print
-  }' "$HOSTS_FILE" >>"$tmpfile"
-
-  # Overwrite in place (some systems prevent unlinking /etc/hosts)
-  # Preserve existing inode/permissions; requires write access
-  if ! tee "$HOSTS_FILE" >/dev/null < "$tmpfile"; then
-    echo "Error: failed to write to $HOSTS_FILE" >&2
-    rm -f "$tmpfile"
-    exit 1
-  fi
-  rm -f "$tmpfile"
-}
-
-main() {
-  require_root
-
-  if [[ ! -f "$HOSTS_FILE" ]]; then
-    echo "Error: $HOSTS_FILE not found" >&2
-    exit 1
-  fi
-
-  backup_hosts
-  apply_mappings
-  echo "Updated $HOSTS_FILE."
-  echo "- localhost -> 127.0.0.2"
-  echo "- facebook.com -> 8.8.8.8"
-  echo "Revert: sudo cp '$BACKUP_FILE' '$HOSTS_FILE'"
-}
-
-main "$@"
+echo "127.0.0.2 localhost" | sudo tee -a /etc/hosts > /dev/null
+echo "8.8.8.8 facebook.com" | sudo tee -a /etc/hosts > /dev/null
